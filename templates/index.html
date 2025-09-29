@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Salary Budget Tracker</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+        :root{
+          --accent:#2b8cff;
+          --muted:#666;
+          --card-bg:#fff;
+          --shadow: 0 6px 18px rgba(15,23,42,0.08);
+        }
+        *{box-sizing:border-box}
+        body { font-family: Inter, Arial, sans-serif; margin: 20px; background:#f6f8fb; color:#111; }
+        header{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+        h1{font-size:1.4rem;margin:0}
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+
+        .card {
+          background:var(--card-bg);
+          border-radius:10px;
+          padding:16px;
+          box-shadow:var(--shadow);
+          overflow:hidden;
+          transform:translateY(8px);
+          opacity:0;
+          transition:transform .45s cubic-bezier(.2,.9,.3,1),opacity .45s;
+        }
+        .card.show{ transform:none; opacity:1; }
+
+        h2 { margin-top: 0; font-size:1.05rem; display:flex;justify-content:space-between;align-items:center }
+        .muted { color:var(--muted); font-size:0.9rem; }
+
+        form { margin:8px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center }
+        input[type="text"], input[type="number"]{
+          padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; min-width:120px;
+          outline:none; transition: box-shadow .12s, border-color .12s;
+          background:transparent;
+        }
+        input:focus{ box-shadow:0 6px 18px rgba(43,140,255,0.12); border-color:var(--accent) }
+        input.currency-input { text-align: right; min-width:140px; }
+
+        button {
+          background:var(--accent); color:#fff; border:none; padding:8px 12px; border-radius:8px;
+          cursor:pointer; position:relative; overflow:hidden; transition:transform .12s,box-shadow .12s;
+        }
+        button:hover{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(43,140,255,0.12) }
+        .btn-ghost{ background:transparent; color:var(--accent); border:1px solid rgba(43,140,255,0.12) }
+
+        ul{ margin:8px 0 12px 18px; padding:0 }
+        li{ margin-bottom:6px; display:flex; justify-content:space-between; gap:12px; align-items:center }
+
+        .small { font-size: 0.9em; color: var(--muted); }
+        .breakdown{ margin-top:8px; border-top:1px dashed #eef2f8; padding-top:10px; }
+        .collapse-btn{ background:transparent; border:none; color:var(--accent); cursor:pointer; font-size:0.95rem }
+
+        /* toast */
+        .toast {
+          position:fixed; right:18px; bottom:18px; background:#111; color:#fff; padding:12px 16px;
+          border-radius:8px; box-shadow:0 10px 30px rgba(2,6,23,0.3); transform:translateY(8px); opacity:0;
+          transition:transform .25s,opacity .25s;
+          z-index:9999;
+        }
+        .toast.show{ transform:none; opacity:1 }
+
+        /* animated counters */
+        .value { font-weight:700; color:#0b1220; }
+
+        /* subtle delete icon */
+        a.del { color:#d64545; text-decoration:none; margin-left:8px }
+
+        @media (max-width:420px){
+          header{flex-direction:column;align-items:flex-start}
+        }
+    </style>
+</head>
+<body>
+    <header>
+      <h1>Salary Budget Tracker (15th & 30th)</h1>
+      <div class="small">Live formatting, animations, goal box deducts from money left</div>
+    </header>
+
+    <div class="grid">
+    {% for cutoff, info in results.items() %}
+    <div class="card" data-cutoff="{{ cutoff }}">
+        <h2>
+          <span>{{ cutoff }} Cutoff</span>
+          <button class="collapse-btn" aria-expanded="true">Hide details ▾</button>
+        </h2>
+
+        <!-- Salary Update Form -->
+        <form method="POST" class="action-form" style="margin-bottom:6px;">
+            <input type="hidden" name="cutoff" value="{{ cutoff }}">
+            <div style="flex:1;min-width:160px;">
+              <label class="small">Salary</label><br>
+              <input type="text" class="currency-input" name="salary" value="{{ info.salary }}">
+            </div>
+            <div style="align-self:flex-end">
+              <button type="submit" class="ripple">Update Salary</button>
+            </div>
+        </form>
+
+        <!-- Bill Addition Form -->
+        <form method="POST" class="action-form" style="margin-bottom:6px;">
+            <input type="hidden" name="cutoff" value="{{ cutoff }}">
+            <div style="flex:1;min-width:120px;">
+              <label class="small">Bill name</label><br>
+              <input type="text" name="bill_name" placeholder="Name">
+            </div>
+            <div style="min-width:120px;">
+              <label class="small">Amount</label><br>
+              <input type="text" class="currency-input" name="bill_amount" placeholder="Amount">
+            </div>
+            <div style="align-self:flex-end">
+              <button type="submit" class="ripple btn-ghost">Add Bill</button>
+            </div>
+        </form>
+
+        <div class="breakdown-panel">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="small">Total Salary</div>
+              <div class="value" data-key="salary" data-target="{{ info.salary }}">{{ info.salary | currency }}</div>
+            </div>
+            <div>
+              <div class="small">Total Bills</div>
+              <div class="value" data-key="total_bills" data-target="{{ info.total_bills }}">{{ info.total_bills | currency }}</div>
+            </div>
+            <div>
+              <div class="small">Savings (20%)</div>
+              <div class="value" data-key="future_fund" data-target="{{ info.future_fund }}">{{ info.future_fund | currency }}</div>
+            </div>
+            <div>
+              <div class="small">Money Left</div>
+              <div class="value" data-key="flex_money" data-target="{{ info.flex_money }}">{{ info.flex_money | currency }}</div>
+            </div>
+          </div>
+
+          <details open style="margin-top:10px">
+            <summary class="small">Bills breakdown</summary>
+            <div style="margin-top:8px">
+              <strong>Bills</strong>
+              <ul>
+                {% for bill in info.bills %}
+                <li>{{ bill.name }} - {{ bill.amount | currency }}
+                    <a href="{{ url_for('delete', cutoff=cutoff, bill_id=loop.index0) }}" class="del" data-delete>❌</a>
+                </li>
+                {% else %}
+                <li><em>No bills added yet!</em></li>
+                {% endfor %}
+              </ul>
+              <p class="small">This cutoff's contribution toward the single global goal is shown above.</p>
+            </div>
+          </details>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Monthly Totals</h2>
+      <div style="display:flex;gap:20px;align-items:center">
+        <div>
+          <div class="small">Total Future Fund</div>
+          <div class="value" id="total_future_display" data-target="{{ total_future }}">{{ total_future | currency }}</div>
+        </div>
+        <div>
+          <div class="small">Total Flex Money</div>
+          <div class="value" id="total_flex_display" data-target="{{ total_flex }}">{{ total_flex | currency }}</div>
+        </div>
+      </div>
+
+      <!-- Global Goal form (user-determined) -->
+      <div style="margin-top:12px;border-top:1px dashed #eef2f8;padding-top:10px">
+        <h3 class="small">Global Savings Goal</h3>
+        <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+          <input type="hidden" name="cutoff" value="">
+          <div style="flex:1;min-width:180px;">
+            <label class="small">Goal name</label><br>
+            <input type="text" name="goal_name" placeholder="What are you saving for?" value="{{ savings_goal.name }}">
+          </div>
+          <div style="min-width:140px;">
+            <label class="small">Amount</label><br>
+            <input id="goal_amount_input" type="text" class="currency-input" name="goal_amount" placeholder="Amount" value="{{ savings_goal.amount }}">
+          </div>
+          <div style="align-self:flex-end">
+            <button type="submit" class="ripple">Set Goal</button>
+            <a href="{{ url_for('delete_goal') }}" class="small" style="margin-left:8px;color:#d64545;text-decoration:none">Clear</a>
+          </div>
+        </form>
+
+        <!-- Manual contribution form -->
+        <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+          <div style="min-width:120px;">
+            <label class="small">Contribute from 15th</label><br>
+            <input type="text" class="currency-input" name="contrib_15th" placeholder="₱0.00">
+          </div>
+          <div style="min-width:120px;">
+            <label class="small">Contribute from 30th</label><br>
+            <input type="text" class="currency-input" name="contrib_30th" placeholder="₱0.00">
+          </div>
+          <div style="align-self:flex-end">
+            <button type="submit" class="ripple">Contribute to Goal</button>
+          </div>
+        </form>
+
+        <div id="goal_summary" style="margin-top:10px">
+          <p><strong>Goal:</strong> <span id="goal_name_display">{{ savings_goal.name or "—" }}</span> &nbsp; <span class="small" id="goal_amount_display">({{ savings_goal.amount | currency }})</span></p>
+          <p><strong>Contributed so far:</strong> <span id="goal_covered_display">{{ goal_covered | currency }}</span> &nbsp; <span class="small">Remaining: <span id="goal_remaining_display">{{ goal_remaining | currency }}</span></span></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- toast -->
+    <div id="toast" class="toast" role="status" aria-live="polite" style="display:none"></div>
+
+<script>
+(function(){
+  /* ---------------- helpers ---------------- */
+  function unformat(v){ return (v||'').toString().replace(/,/g,'').trim(); }
+  function toNumber(v){ v = unformat(v); if (v === '' || v === '.' ) return NaN; return Number(v); }
+  function sanitizeForFormatting(str){
+    str = (str||'').toString().replace(/,/g, '');
+    str = str.replace(/[^\d.]/g, '');
+    const parts = str.split('.');
+    if (parts.length > 2) str = parts[0] + '.' + parts.slice(1).join('');
+    return str;
+  }
+  function formatWithCommasFromString(str){
+    if (str === '') return '';
+    const parts = str.split('.');
+    let intPart = parts[0];
+    const decPart = parts[1] || '';
+    intPart = intPart.replace(/^0+(?=\d)/, '');
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return decPart !== '' ? intPart + '.' + decPart : intPart;
+  }
+  function formatCurrencyJS(n){
+    if (n === '' || n === null || isNaN(n)) return '₱0.00';
+    return '₱' + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  /* ---------------- input live formatting (existing) ---------------- */
+  document.querySelectorAll('.currency-input').forEach(function(el){
+    const initSan = sanitizeForFormatting(String(el.value || ''));
+    if (initSan !== '') el.value = formatWithCommasFromString(initSan);
+
+    el.addEventListener('focus', function(){
+      const raw = unformat(el.value);
+      el.value = raw;
+      setTimeout(()=> { el.selectionStart = el.selectionEnd = el.value.length; }, 0);
+    });
+
+    el.addEventListener('input', function(){
+      const input = el;
+      const rawBefore = input.value;
+      const caretPos = input.selectionStart || 0;
+      let charsLeft = 0;
+      for (let i=0;i<caretPos && i<rawBefore.length;i++) if (rawBefore[i]!==',') charsLeft++;
+
+      let sanitized = sanitizeForFormatting(rawBefore);
+      if (sanitized === '.') { input.value = '.'; return; }
+
+      const parts = sanitized.split('.');
+      let intPart = parts[0] || '';
+      let decPart = parts[1] || '';
+      if (decPart.length > 6) decPart = decPart.slice(0,6);
+      const combined = decPart === '' ? intPart : intPart + '.' + decPart;
+      const formatted = formatWithCommasFromString(combined);
+      input.value = formatted;
+
+      // restore caret
+      let cnt = 0; let pos = formatted.length;
+      for (let i=0;i<formatted.length;i++){
+        if (formatted[i]!==',') cnt++;
+        if (cnt === charsLeft){ pos = i+1; break; }
+      }
+      input.selectionStart = input.selectionEnd = pos;
+
+      // live recalculation when salary/bill/goal inputs change
+      scheduleLiveGoalUpdate();
+    });
+
+    el.addEventListener('blur', function(){
+      const raw = unformat(el.value);
+      if (raw === '' || raw === '.') { el.value = ''; scheduleLiveGoalUpdate(); return; }
+      const num = Number(raw);
+      if (isNaN(num)) { el.value = ''; scheduleLiveGoalUpdate(); return; }
+      el.value = Number(num).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      scheduleLiveGoalUpdate();
+    });
+  });
+
+  /* ensure forms submit raw numbers (no commas) and set toast message before submit */
+  document.querySelectorAll('form.action-form').forEach(function(form){
+    form.addEventListener('submit', function(e){
+      form.querySelectorAll('.currency-input').forEach(function(el){
+        const n = unformat(el.value);
+        el.value = (n === '') ? '' : String(n);
+      });
+      try {
+        const formData = new FormData(form);
+        let msg = 'Saved';
+        if (formData.get('bill_name')) msg = 'Bill saved';
+        if (formData.get('salary')) msg = 'Salary updated';
+        sessionStorage.setItem('bt_toast', msg);
+      } catch(e){}
+    });
+  });
+
+  document.getElementById('global-goal-form').addEventListener('submit', function(){
+    // make sure goal input submits raw number
+    const el = document.getElementById('goal_amount_input');
+    const n = unformat(el.value);
+    el.value = (n === '') ? '' : String(n);
+  });
+
+  /* Delete links: confirm and set toast */
+  document.querySelectorAll('[data-delete]').forEach(function(a){
+    a.addEventListener('click', function(ev){
+      ev.preventDefault();
+      const href = a.getAttribute('href');
+      if (!confirm('Delete this item?')) return;
+      sessionStorage.setItem('bt_toast', 'Deleted');
+      window.location = href;
+    });
+  });
+
+  /* show toast if sessionStorage set (after reload) */
+  function showToast(text){
+    const t = document.getElementById('toast');
+    t.textContent = text;
+    t.style.display = 'block';
+    setTimeout(()=> t.classList.add('show'), 10);
+    setTimeout(()=> { t.classList.remove('show'); setTimeout(()=> t.style.display='none',250); }, 3000);
+  }
+  const st = sessionStorage.getItem('bt_toast');
+  if (st){ showToast(st); sessionStorage.removeItem('bt_toast'); }
+
+  /* animate cards into view and counters */
+  const cards = document.querySelectorAll('.card');
+  cards.forEach((c,i)=> setTimeout(()=> c.classList.add('show'), 60 * i));
+
+  function animateCounters(){
+    document.querySelectorAll('.value').forEach(function(el){
+      const target = Number(el.getAttribute('data-target')) || 0;
+      const duration = 750;
+      const start = performance.now();
+      const initial = 0;
+      function step(now){
+        const t = Math.min(1, (now - start) / duration);
+        const eased = t*(2-t); // ease-out-ish
+        const cur = initial + (target - initial) * eased;
+        el.textContent = formatCurrencyJS(cur);
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }
+  setTimeout(animateCounters, 350);
+
+  /* collapse toggle */
+  document.querySelectorAll('.collapse-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      const card = btn.closest('.card');
+      const details = card.querySelector('details');
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      if (details) details.open = expanded;
+      btn.setAttribute('aria-expanded', (!expanded).toString());
+      btn.textContent = (!expanded) ? 'Hide details ▾' : 'Show details ▸';
+    });
+  });
+
+  /* small ripple visual */
+  document.querySelectorAll('button.ripple').forEach(btn=>{
+    btn.addEventListener('click', function(e){
+      const circle = document.createElement('span');
+      const rect = btn.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      circle.style.position = 'absolute';
+      circle.style.width = circle.style.height = size + 'px';
+      circle.style.borderRadius = '50%';
+      circle.style.left = (e.clientX - rect.left - size/2) + 'px';
+      circle.style.top = (e.clientY - rect.top - size/2) + 'px';
+      circle.style.background = 'rgba(255,255,255,0.25)';
+      circle.style.transform = 'scale(0)';
+      circle.style.transition = 'transform .4s, opacity .4s';
+      btn.appendChild(circle);
+      requestAnimationFrame(()=> circle.style.transform = 'scale(1)');
+      setTimeout(()=> { circle.style.opacity = '0'; }, 300);
+      setTimeout(()=> { circle.remove(); }, 700);
+    });
+  });
+
+  /* ---------------- Live goal allocation UI (client-side) ---------------- */
+  let liveUpdateTimeout = null;
+  function scheduleLiveGoalUpdate(){ clearTimeout(liveUpdateTimeout); liveUpdateTimeout = setTimeout(computeLiveGoalAllocation, 80); }
+
+  function computeLiveGoalAllocation(){
+    // gather per-card raw flex (use input salary if edited, else server data-target)
+    const cardEntries = [];
+    document.querySelectorAll('.card[data-cutoff]').forEach(function(card){
+      const key = card.getAttribute('data-cutoff');
+      // salary: prefer salary input value if present and non-empty
+      const salaryInput = card.querySelector('input[name="salary"]');
+      let salary = NaN;
+      if (salaryInput){
+        salary = toNumber(salaryInput.value);
+      }
+      if (isNaN(salary)){
+        salary = Number(card.querySelector('.value[data-key="salary"]').getAttribute('data-target')) || 0;
+      }
+
+      const total_bills = Number(card.querySelector('.value[data-key="total_bills"]').getAttribute('data-target')) || 0;
+      const future_fund = Number(card.querySelector('.value[data-key="future_fund"]').getAttribute('data-target')) || 0;
+
+      const raw_flex = salary - total_bills - future_fund;
+      cardEntries.push({ card, key, salary, total_bills, future_fund, raw_flex });
+    });
+
+    const total_raw_flex = cardEntries.reduce((s,it) => s + (it.raw_flex > 0 ? it.raw_flex : 0), 0);
+
+    // goal amount from global input (live)
+    const goalInput = document.getElementById('goal_amount_input');
+    const goalNameInput = document.querySelector('input[name="goal_name"]');
+    const goalAmount = toNumber(goalInput.value);
+    const goalAmountVal = isNaN(goalAmount) ? Number(goalInput.getAttribute('value') || 0) : goalAmount;
+
+    const goal_covered = Math.min(Math.max(total_raw_flex, 0), Math.max(goalAmountVal, 0));
+    const goal_remaining = Math.max(goalAmountVal - goal_covered, 0);
+
+    // allocate proportionally across positive raw flexes
+    cardEntries.forEach(function(it){
+      let allocated = 0;
+      if (total_raw_flex > 0 && it.raw_flex > 0){
+        allocated = (it.raw_flex / total_raw_flex) * goal_covered;
+      }
+      const flex_after = it.raw_flex - allocated;
+
+      // update DOM allocated and flex displays (both text and data-target)
+      const allocatedEl = it.card.querySelector('.value[data-key="allocated_to_goal"]');
+      const flexEl = it.card.querySelector('.value[data-key="flex_money"]');
+      if (allocatedEl){ allocatedEl.textContent = formatCurrencyJS(allocated); allocatedEl.setAttribute('data-target', Number(allocated).toFixed(2)); }
+      if (flexEl){ flexEl.textContent = formatCurrencyJS(flex_after); flexEl.setAttribute('data-target', Number(flex_after).toFixed(2)); }
+    });
+
+    // update monthly totals display nodes
+    const totalFuture = document.querySelectorAll('.value[data-key="future_fund"]');
+    let sumFuture = 0;
+    totalFuture.forEach(el => sumFuture += Number(el.getAttribute('data-target')) || 0);
+    document.getElementById('total_future_display').textContent = formatCurrencyJS(sumFuture);
+    document.getElementById('total_future_display').setAttribute('data-target', sumFuture.toFixed(2));
+
+    const totalFlexAfter = cardEntries.reduce((s,it)=>{
+      // compute flex_after consistent with allocation above
+      let alloc = 0;
+      if (total_raw_flex > 0 && it.raw_flex > 0) alloc = (it.raw_flex / total_raw_flex) * goal_covered;
+      return s + (it.raw_flex - alloc);
+    },0);
+    document.getElementById('total_flex_display').textContent = formatCurrencyJS(totalFlexAfter);
+    document.getElementById('total_flex_display').setAttribute('data-target', totalFlexAfter.toFixed(2));
+
+    // update goal summary box
+    document.getElementById('goal_name_display').textContent = (goalNameInput && goalNameInput.value) ? goalNameInput.value : (document.getElementById('goal_name_display').textContent || '—');
+    document.getElementById('goal_amount_display').textContent = '(' + formatCurrencyJS(goalAmountVal) + ')';
+    document.getElementById('goal_covered_display').textContent = formatCurrencyJS(goal_covered);
+    document.getElementById('goal_remaining_display').textContent = formatCurrencyJS(goal_remaining);
+    document.getElementById('total_raw_flex_display').textContent = formatCurrencyJS(total_raw_flex);
+  }
+
+  // live update when page loads
+  setTimeout(computeLiveGoalAllocation, 400);
+
+  // call when goal inputs change
+  document.getElementById('goal_amount_input').addEventListener('input', scheduleLiveGoalUpdate);
+  document.querySelector('input[name="goal_name"]').addEventListener('input', scheduleLiveGoalUpdate);
+
+})();
+</script>
+</body>
+</html>

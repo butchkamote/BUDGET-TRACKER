@@ -13,10 +13,12 @@ header { margin-bottom: 18px; }
 button { background: #2b8cff; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
 input, select { padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
         :root{
-          --accent:#2b8cff;
-          --muted:#666;
-          --card-bg:#fff;
-          --shadow: 0 6px 18px rgba(15,23,42,0.08);
+          --accent:#ff6fb5; /* warm pink */
+          --accent-2: #ffb7da; /* soft pink */
+          --muted:#7b6b7b; /* muted mauve */
+          --card-bg: linear-gradient(180deg, #fffafc 0%, #fff5fb 100%);
+          --shadow: 0 10px 30px rgba(255,111,181,0.08);
+          --glass: rgba(255,255,255,0.7);
         }
         *{box-sizing:border-box}
         body { font-family: Inter, Arial, sans-serif; margin: 20px; background:#f6f8fb; color:#111; }
@@ -81,14 +83,18 @@ input, select { padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
           header{flex-direction:column;align-items:flex-start}
         }
 /* page and color palette */
-body { font-family: Inter, Arial, sans-serif; margin: 20px; background: linear-gradient(180deg,#f1f5f9 0%, #eef2ff 100%); color: #0f172a; }
-.card { background: var(--card-bg); color: inherit; }
-h1 { color: var(--accent); }
-h2, h3 { color: #0b1220; }
+body { font-family: 'Poppins', Inter, Arial, sans-serif; margin: 20px; background: linear-gradient(180deg,#fff6fb 0%, #fff0f6 100%); color: #2b1330; }
+.card { background: var(--card-bg); color: inherit; border: 1px solid rgba(255,191,221,0.6); box-shadow: var(--shadow); }
+h1 { color: var(--accent); font-weight:700; letter-spacing:0.4px }
+h2, h3 { color: #3b2236; }
 .small { color: var(--muted); }
-.value { color: #0b1220; }
-input, button { color: #0f172a; background: #fff; }
-button { background: linear-gradient(90deg,var(--accent), #60a5fa); box-shadow: 0 8px 20px rgba(43,140,255,0.12); }
+.value { color: #3b2236; }
+input, button { color: #2b1330; background: #fff; }
+button { background: linear-gradient(90deg,var(--accent), var(--accent-2)); box-shadow: 0 10px 30px rgba(255,111,181,0.12); border: none; }
+input[type="text"], input[type="number"] { background: rgba(255,250,253,0.9); border: 1px solid rgba(255,182,208,0.6); }
+input:focus{ box-shadow:0 8px 30px rgba(255,111,181,0.12); border-color:var(--accent) }
+button:hover{ transform:translateY(-3px); box-shadow:0 18px 40px rgba(255,111,181,0.12) }
+ .collapse-btn{ color: var(--accent); }
     </style>
 </head>
 <body>

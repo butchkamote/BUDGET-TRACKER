@@ -4,6 +4,14 @@
     <title>Salary Budget Tracker</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
+        body { font-family: Arial, sans-serif; background: #f6f8fb; margin: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.card { background: #fff; border-radius: 10px; box-shadow: 0 6px 18px rgba(15,23,42,0.08); padding: 16px; margin-bottom: 16px; }
+.value { font-weight: bold; color: #0b1220; }
+header { margin-bottom: 18px; }
+.small { color: #666; font-size: 0.9em; }
+button { background: #2b8cff; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+input, select { padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0; }
         :root{
           --accent:#2b8cff;
           --muted:#666;
@@ -72,6 +80,15 @@
         @media (max-width:420px){
           header{flex-direction:column;align-items:flex-start}
         }
+/* page and color palette */
+body { font-family: Inter, Arial, sans-serif; margin: 20px; background: linear-gradient(180deg,#f1f5f9 0%, #eef2ff 100%); color: #0f172a; }
+.card { background: var(--card-bg); color: inherit; }
+h1 { color: var(--accent); }
+h2, h3 { color: #0b1220; }
+.small { color: var(--muted); }
+.value { color: #0b1220; }
+input, button { color: #0f172a; background: #fff; }
+button { background: linear-gradient(90deg,var(--accent), #60a5fa); box-shadow: 0 8px 20px rgba(43,140,255,0.12); }
     </style>
 </head>
 <body>
@@ -149,7 +166,7 @@
                 <li><em>No bills added yet!</em></li>
                 {% endfor %}
               </ul>
-              <p class="small">This cutoff's contribution toward the single global goal is shown above.</p>
+              <p class="small">This cutoff's contribution toward the single global goal: <span class="value" data-key="allocated_to_goal" data-target="{{ info.allocated_to_goal }}">{{ info.allocated_to_goal | currency }}</span></p>
             </div>
           </details>
         </div>
@@ -173,7 +190,7 @@
       <!-- Global Goal form (user-determined) -->
       <div style="margin-top:12px;border-top:1px dashed #eef2f8;padding-top:10px">
         <h3 class="small">Global Savings Goal</h3>
-        <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+  <form id="global-goal-form" method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
           <input type="hidden" name="cutoff" value="">
           <div style="flex:1;min-width:180px;">
             <label class="small">Goal name</label><br>
@@ -190,23 +207,30 @@
         </form>
 
         <!-- Manual contribution form -->
-        <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
-          <div style="min-width:120px;">
+        <form id="contrib-form" method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+          <div style="min-width:140px;">
             <label class="small">Contribute from 15th</label><br>
-            <input type="text" class="currency-input" name="contrib_15th" placeholder="₱0.00">
+            <input id="contrib_15th_input" type="text" class="currency-input" name="contrib_15th" placeholder="₱0.00" value="{{ results['15th'].flex_money }}">
+            <div id="err_c15" class="small" style="color:#d64545;display:none;margin-top:4px">Amount exceeded.</div>
           </div>
-          <div style="min-width:120px;">
+          <div style="min-width:140px;">
             <label class="small">Contribute from 30th</label><br>
-            <input type="text" class="currency-input" name="contrib_30th" placeholder="₱0.00">
+            <input id="contrib_30th_input" type="text" class="currency-input" name="contrib_30th" placeholder="₱0.00" value="{{ results['30th'].flex_money }}">
+            <div id="err_c30" class="small" style="color:#d64545;display:none;margin-top:4px">Amount exceeded.</div>
+          </div>
+          <div style="min-width:160px;align-self:center">
+            <label class="small">Contribute to Goal</label>
+            <div id="total_contrib_display" class="value">₱0.00</div>
           </div>
           <div style="align-self:flex-end">
-            <button type="submit" class="ripple">Contribute to Goal</button>
+            <button id="contrib_submit" type="submit" class="ripple">Contribute to Goal</button>
           </div>
         </form>
 
         <div id="goal_summary" style="margin-top:10px">
           <p><strong>Goal:</strong> <span id="goal_name_display">{{ savings_goal.name or "—" }}</span> &nbsp; <span class="small" id="goal_amount_display">({{ savings_goal.amount | currency }})</span></p>
           <p><strong>Contributed so far:</strong> <span id="goal_covered_display">{{ goal_covered | currency }}</span> &nbsp; <span class="small">Remaining: <span id="goal_remaining_display">{{ goal_remaining | currency }}</span></span></p>
+          <p class="small">Combined raw flex available before goal: <span id="total_raw_flex_display">₱0.00</span></p>
         </div>
       </div>
     </div>
@@ -397,25 +421,16 @@
   function scheduleLiveGoalUpdate(){ clearTimeout(liveUpdateTimeout); liveUpdateTimeout = setTimeout(computeLiveGoalAllocation, 80); }
 
   function computeLiveGoalAllocation(){
-    // gather per-card raw flex (use input salary if edited, else server data-target)
+    // gather per-card flex as provided by server (data-target) and existing manual contributions
     const cardEntries = [];
     document.querySelectorAll('.card[data-cutoff]').forEach(function(card){
       const key = card.getAttribute('data-cutoff');
-      // salary: prefer salary input value if present and non-empty
-      const salaryInput = card.querySelector('input[name="salary"]');
-      let salary = NaN;
-      if (salaryInput){
-        salary = toNumber(salaryInput.value);
-      }
-      if (isNaN(salary)){
-        salary = Number(card.querySelector('.value[data-key="salary"]').getAttribute('data-target')) || 0;
-      }
-
-      const total_bills = Number(card.querySelector('.value[data-key="total_bills"]').getAttribute('data-target')) || 0;
-      const future_fund = Number(card.querySelector('.value[data-key="future_fund"]').getAttribute('data-target')) || 0;
-
-      const raw_flex = salary - total_bills - future_fund;
-      cardEntries.push({ card, key, salary, total_bills, future_fund, raw_flex });
+      const salary = Number(card.querySelector('.value[data-key="salary"]')?.getAttribute('data-target')) || 0;
+      const total_bills = Number(card.querySelector('.value[data-key="total_bills"]')?.getAttribute('data-target')) || 0;
+      const future_fund = Number(card.querySelector('.value[data-key="future_fund"]')?.getAttribute('data-target')) || 0;
+      const existingManual = Number(card.querySelector('.value[data-key="allocated_to_goal"]')?.getAttribute('data-target')) || 0;
+      const raw_flex = salary - total_bills - future_fund - existingManual;
+      cardEntries.push({ card, key, salary, total_bills, future_fund, raw_flex, existingManual });
     });
 
     const total_raw_flex = cardEntries.reduce((s,it) => s + (it.raw_flex > 0 ? it.raw_flex : 0), 0);
@@ -423,49 +438,64 @@
     // goal amount from global input (live)
     const goalInput = document.getElementById('goal_amount_input');
     const goalNameInput = document.querySelector('input[name="goal_name"]');
-    const goalAmount = toNumber(goalInput.value);
-    const goalAmountVal = isNaN(goalAmount) ? Number(goalInput.getAttribute('value') || 0) : goalAmount;
+    const goalAmount = toNumber(goalInput?.value);
+    const goalAmountVal = isNaN(goalAmount) ? Number(goalInput?.getAttribute('value') || 0) : goalAmount;
 
-    const goal_covered = Math.min(Math.max(total_raw_flex, 0), Math.max(goalAmountVal, 0));
-    const goal_remaining = Math.max(goalAmountVal - goal_covered, 0);
+    const entry15 = cardEntries.find(it=>it.key==='15th');
+    const entry30 = cardEntries.find(it=>it.key==='30th');
+    const flex15 = entry15 ? Math.max(entry15.raw_flex, 0) : 0;
+    const flex30 = entry30 ? Math.max(entry30.raw_flex, 0) : 0;
 
-    // allocate proportionally across positive raw flexes
-    cardEntries.forEach(function(it){
-      let allocated = 0;
-      if (total_raw_flex > 0 && it.raw_flex > 0){
-        allocated = (it.raw_flex / total_raw_flex) * goal_covered;
-      }
-      const flex_after = it.raw_flex - allocated;
+    const c15input = document.getElementById('contrib_15th_input');
+    const c30input = document.getElementById('contrib_30th_input');
+    const c15Err = document.getElementById('err_c15');
+    const c30Err = document.getElementById('err_c30');
 
-      // update DOM allocated and flex displays (both text and data-target)
-      const allocatedEl = it.card.querySelector('.value[data-key="allocated_to_goal"]');
-      const flexEl = it.card.querySelector('.value[data-key="flex_money"]');
-      if (allocatedEl){ allocatedEl.textContent = formatCurrencyJS(allocated); allocatedEl.setAttribute('data-target', Number(allocated).toFixed(2)); }
-      if (flexEl){ flexEl.textContent = formatCurrencyJS(flex_after); flexEl.setAttribute('data-target', Number(flex_after).toFixed(2)); }
+    // prefill inputs if they are blank
+    if (c15input && (c15input.value === '' || c15input.value == null)) c15input.value = Number(flex15).toFixed(2);
+    if (c30input && (c30input.value === '' || c30input.value == null)) c30input.value = Number(flex30).toFixed(2);
+
+    // compute numeric values
+    const c15val = toNumber(unformat(c15input ? c15input.value : '')) || 0;
+    const c30val = toNumber(unformat(c30input ? c30input.value : '')) || 0;
+    const totalContrib = c15val + c30val;
+
+    // validation: each contrib must not exceed its cutoff's available flex
+    if (c15Err) c15Err.style.display = (c15val > flex15) ? 'block' : 'none';
+    if (c30Err) c30Err.style.display = (c30val > flex30) ? 'block' : 'none';
+
+    const totalContribEl = document.getElementById('total_contrib_display');
+    if (totalContribEl) totalContribEl.textContent = formatCurrencyJS(totalContrib);
+
+    // update goal summary (no automatic allocation)
+    const gnameEl = document.getElementById('goal_name_display'); if (gnameEl) gnameEl.textContent = (goalNameInput && goalNameInput.value) ? goalNameInput.value : (gnameEl.textContent || '—');
+    const gamountEl = document.getElementById('goal_amount_display'); if (gamountEl) gamountEl.textContent = '(' + formatCurrencyJS(goalAmountVal) + ')';
+    const gcoveredEl = document.getElementById('goal_covered_display'); if (gcoveredEl) gcoveredEl.textContent = formatCurrencyJS(Number(gcoveredEl.textContent.replace(/[^0-9.-]+/g,'')||0));
+    const gremainingEl = document.getElementById('goal_remaining_display'); if (gremainingEl) {
+      const covered = Number(gcoveredEl ? gcoveredEl.textContent.replace(/[^0-9.-]+/g,'') : 0) || 0;
+      gremainingEl.textContent = formatCurrencyJS(Math.max(goalAmountVal - covered, 0));
+    }
+
+    // update total raw flex display
+    const trf = document.getElementById('total_raw_flex_display'); if (trf) trf.textContent = formatCurrencyJS(total_raw_flex);
+  }
+
+  // contrib form submit: sanitize and validate before sending
+  const contribForm = document.getElementById('contrib-form');
+  if (contribForm){
+    contribForm.addEventListener('submit', function(e){
+      const c15 = document.getElementById('contrib_15th_input');
+      const c30 = document.getElementById('contrib_30th_input');
+      const v15 = toNumber(unformat(c15 ? c15.value : '')) || 0;
+      const v30 = toNumber(unformat(c30 ? c30.value : '')) || 0;
+      const flex15 = Number(document.querySelector('.card[data-cutoff="15th"] .value[data-key="flex_money"]')?.getAttribute('data-target')) || 0;
+      const flex30 = Number(document.querySelector('.card[data-cutoff="30th"] .value[data-key="flex_money"]')?.getAttribute('data-target')) || 0;
+      if (v15 > flex15){ e.preventDefault(); alert('Amount exceeded for 15th'); return; }
+      if (v30 > flex30){ e.preventDefault(); alert('Amount exceeded for 30th'); return; }
+      if (c15) c15.value = (c15.value === '') ? '' : String(v15);
+      if (c30) c30.value = (c30.value === '') ? '' : String(v30);
+      sessionStorage.setItem('bt_toast', 'Contributed');
     });
-
-    // update monthly totals display nodes
-    const totalFuture = document.querySelectorAll('.value[data-key="future_fund"]');
-    let sumFuture = 0;
-    totalFuture.forEach(el => sumFuture += Number(el.getAttribute('data-target')) || 0);
-    document.getElementById('total_future_display').textContent = formatCurrencyJS(sumFuture);
-    document.getElementById('total_future_display').setAttribute('data-target', sumFuture.toFixed(2));
-
-    const totalFlexAfter = cardEntries.reduce((s,it)=>{
-      // compute flex_after consistent with allocation above
-      let alloc = 0;
-      if (total_raw_flex > 0 && it.raw_flex > 0) alloc = (it.raw_flex / total_raw_flex) * goal_covered;
-      return s + (it.raw_flex - alloc);
-    },0);
-    document.getElementById('total_flex_display').textContent = formatCurrencyJS(totalFlexAfter);
-    document.getElementById('total_flex_display').setAttribute('data-target', totalFlexAfter.toFixed(2));
-
-    // update goal summary box
-    document.getElementById('goal_name_display').textContent = (goalNameInput && goalNameInput.value) ? goalNameInput.value : (document.getElementById('goal_name_display').textContent || '—');
-    document.getElementById('goal_amount_display').textContent = '(' + formatCurrencyJS(goalAmountVal) + ')';
-    document.getElementById('goal_covered_display').textContent = formatCurrencyJS(goal_covered);
-    document.getElementById('goal_remaining_display').textContent = formatCurrencyJS(goal_remaining);
-    document.getElementById('total_raw_flex_display').textContent = formatCurrencyJS(total_raw_flex);
   }
 
   // live update when page loads

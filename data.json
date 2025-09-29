@@ -1,0 +1,39 @@
+{
+  "15th": {
+    "salary": 12500.0,
+    "bills": [
+      {
+        "name": "Pixel Payment",
+        "amount": 2500.0
+      },
+      {
+        "name": "Food",
+        "amount": 3000.0
+      },
+      {
+        "name": "Wi-FI BIll",
+        "amount": 800.0
+      }
+    ],
+    "manual_contrib": 1000.0
+  },
+  "30th": {
+    "salary": 22500.0,
+    "bills": [
+      {
+        "name": "Food",
+        "amount": 3000.0
+      },
+      {
+        "name": "Electricity Bill",
+        "amount": 300.0
+      }
+    ],
+    "manual_contrib": 8000.0
+  },
+  "savings_goal": {
+    "name": "Mac MIni",
+    "amount": 31000.0,
+    "goal_covered": 9000.0
+  }
+}
